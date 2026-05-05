@@ -1,0 +1,14 @@
+{
+  "builds": [
+    { "src": "api/dashboard.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/dashboard.py" }
+  ],
+  "functions": {
+    "api/dashboard.py": {
+      "runtime": "python3.9",
+      "maxDuration": 10
+    }
+  }
+}
