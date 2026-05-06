@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Payout {
+  id               String   @id @default(cuid())
+  employee         String
+  region           String
+  expected_amount  Float
+  actual_amount    Float
+  status           String   @default("processed")
+  processing_time  Int?     // milliseconds
+  processed_at     DateTime @default(now())
+  errors           ErrorLog[]
+}
+
+model ErrorLog {
+  id          String   @id @default(cuid())
+  payoutId    String?
+  employee    String
+  region      String
+  type        String
+  severity    String   @default("medium")
+  description String
+  createdAt   DateTime @default(now())
+
+  payout      Payout?  @relation(fields: [payoutId], references: [id])
+}
