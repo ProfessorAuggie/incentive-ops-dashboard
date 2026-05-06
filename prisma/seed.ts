@@ -63,35 +63,41 @@ async function main() {
 
   // Create sample incentives with various statuses and amounts
   const incentiveData = [
-    { employeeId: allEmployees[0].id, expected: 5000, actual: 5000, delay: false, error: false },
-    { employeeId: allEmployees[0].id, expected: 3500, actual: 3450, delay: false, error: true },
-    {
-      employeeId: allEmployees[1].id,
-      expected: 4200,
-      actual: 4200,
-      delay: true,
-      error: false,
-    },
-    { employeeId: allEmployees[1].id, expected: 2800, actual: 2850, delay: false, error: false },
-    { employeeId: allEmployees[2].id, expected: 6000, actual: 5950, delay: false, error: false },
-    { employeeId: allEmployees[2].id, expected: 4500, actual: 4100, delay: false, error: true },
-    { employeeId: allEmployees[3].id, expected: 3000, actual: 3000, delay: false, error: false },
-    { employeeId: allEmployees[3].id, expected: 2500, actual: 2550, delay: true, error: true },
-    { employeeId: allEmployees[4].id, expected: 3800, actual: 3800, delay: false, error: false },
-    {
-      employeeId: allEmployees[4].id,
-      expected: 2200,
-      actual: 2200,
-      delay: false,
-      error: false,
-    },
+    // Normal cases
+    { employeeId: allEmployees[0].id, expected: 5000, actual: 5000, sales: 15000, target: 10000, delay: false, error: false },
+    { employeeId: allEmployees[0].id, expected: 3500, actual: 3450, sales: 12000, target: 10000, delay: false, error: true },
+    
+    // Correct payout with delay
+    { employeeId: allEmployees[1].id, expected: 4200, actual: 4200, sales: 14000, target: 12000, delay: true, error: false },
+    { employeeId: allEmployees[1].id, expected: 2800, actual: 2850, sales: 9000, target: 8000, delay: false, error: false },
+    
+    // Normal high performer
+    { employeeId: allEmployees[2].id, expected: 6000, actual: 5950, sales: 20000, target: 15000, delay: false, error: false },
+    
+    // ERROR: Incorrect payout (zero payout but exceeded target)
+    { employeeId: allEmployees[2].id, expected: 4500, actual: 0, sales: 16000, target: 12000, delay: false, error: true, flagAsIncorrect: true },
+    
+    // Normal middle performer
+    { employeeId: allEmployees[3].id, expected: 3000, actual: 3000, sales: 11000, target: 9000, delay: false, error: false },
+    
+    // ERROR: Suspicious value (payout too high relative to sales)
+    { employeeId: allEmployees[3].id, expected: 2500, actual: 7500, sales: 12000, target: 10000, delay: true, error: true, flagAsSuspicious: true },
+    
+    // Normal performer
+    { employeeId: allEmployees[4].id, expected: 3800, actual: 3800, sales: 13000, target: 11000, delay: false, error: false },
+    
+    // Another normal case
+    { employeeId: allEmployees[4].id, expected: 2200, actual: 2200, sales: 8000, target: 7000, delay: false, error: false },
   ];
 
   const incentives = await Promise.all(
-    incentiveData.map((data) => {
+    incentiveData.map((data: any) => {
       const variance = data.actual - data.expected;
       const variancePercent = (Math.abs(variance) / data.expected) * 100;
       const processingTime = data.delay ? 6000 + Math.random() * 5000 : Math.random() * 3000;
+
+      const isIncorrectPayout = data.flagAsIncorrect ?? (data.actual === 0 && data.sales > data.target);
+      const isSuspiciousValue = data.flagAsSuspicious ?? (data.sales > 0 && data.actual / data.sales > 0.5);
 
       return prisma.incentive.create({
         data: {
@@ -103,12 +109,20 @@ async function main() {
           processingTimeMs: Math.round(processingTime),
           status: "processed",
           period: "2026-05",
+          salesAmount: data.sales,
+          salesTarget: data.target,
           hasError: data.error,
+          isIncorrectPayout,
+          isSuspiciousValue,
           errorType: data.error
-            ? ["data_issue", "logic_issue", "delay_issue"][Math.floor(Math.random() * 3)]
+            ? isIncorrectPayout ? "incorrect_payout"
+            : isSuspiciousValue ? "suspicious_value"
+            : ["data_issue", "logic_issue", "delay_issue"][Math.floor(Math.random() * 3)]
             : null,
           errorDescription: data.error
-            ? [
+            ? isIncorrectPayout ? `Zero payout despite achieving sales target: $${data.sales.toFixed(2)} sales vs $${data.target.toFixed(2)} target`
+            : isSuspiciousValue ? `Payout unusually high relative to sales: $${data.actual.toFixed(2)} payout on $${data.sales.toFixed(2)} sales`
+            : [
                 "Missing employee classification",
                 "Calculation mismatch in formula",
                 "Processing timeout exceeded",
@@ -116,7 +130,9 @@ async function main() {
               ][Math.floor(Math.random() * 4)]
             : null,
           errorSeverity: data.error
-            ? ["critical", "high", "medium"][Math.floor(Math.random() * 3)]
+            ? isIncorrectPayout ? "critical"
+            : isSuspiciousValue ? "high"
+            : ["critical", "high", "medium"][Math.floor(Math.random() * 3)]
             : null,
         },
       });

@@ -157,12 +157,14 @@ model Employee {
 
 ### Incentive Model
 
-Tracksincentive payouts with automatic error detection and variance calculation:
+Tracks incentive payouts with automatic error detection, sales context, and variance calculation:
 
 ```prisma
 model Incentive {
   id               String   @id @default(cuid())
   employeeId       String
+  salesAmount      Float    @default(0)
+  salesTarget      Float    @default(0)
   expectedAmount   Float
   actualAmount     Float
   variance         Float?   // Calculated: actualAmount - expectedAmount
@@ -172,9 +174,11 @@ model Incentive {
   period           String   // "2026-05", "2026-Q1"
   
   hasError         Boolean  @default(false)
-  errorType        String?  // data_issue, logic_issue, delay_issue
+  errorType        String?  // data_issue, logic_issue, delay_issue, incorrect_payout, suspicious_value
   errorDescription String?
   errorSeverity    String?  // critical, high, medium, low
+  isIncorrectPayout Boolean  @default(false)
+  isSuspiciousValue Boolean  @default(false)
   
   processedAt      DateTime @default(now())
   createdAt        DateTime @default(now())
@@ -227,11 +231,21 @@ Returns KPI metrics queried from shared database.
 ```json
 {
   "totalIncentivesProcessed": 10,
+  "averageIncentive": 4125.5,
   "errorRate": 20.0,
+  "anomalyCount": 2,
+  "errorBreakdown": {
+    "dataIssues": 1,
+    "logicIssues": 1,
+    "delayIssues": 1,
+    "incorrectPayouts": 1,
+    "suspiciousValues": 1
+  },
   "avgProcessingTimeMs": 3450.5,
   "pendingIncentives": 0,
   "slaCompliance": 96.5,
-  "avgAccuracy": 98.2
+  "avgAccuracy": 98.2,
+  "avgVariancePercent": 4.2
 }
 ```
 
@@ -257,9 +271,9 @@ Fetches paginated payouts data (default: 50 items).
 }
 ```
 
-### `GET /api/errors?type=&region=`
+### `GET /api/errors?errorType=&region=`
 
-Fetches filtered error logs (supports optional `type` and `region` query params).
+Fetches filtered error logs (supports optional `errorType` and `region` query params).
 
 **Response:**
 ```json
@@ -269,9 +283,11 @@ Fetches filtered error logs (supports optional `type` and `region` query params)
       "id": "cuid...",
       "employee": "Jane Smith",
       "region": "EMEA",
-      "type": "Data issue",
-      "severity": "high",
-      "description": "Missing employee ID in request",
+      "type": "incorrect_payout",
+      "severity": "critical",
+      "description": "Zero payout despite achieving sales target",
+      "salesAmount": 16000,
+      "salesTarget": 12000,
       "createdAt": "2026-05-06T09:15:00Z"
     }
   ]
@@ -309,13 +325,21 @@ Validates all recent payouts and returns mismatches and delays.
 
 ### Error Classification
 
-Errors are automatically classified into three categories:
+Errors are automatically classified into five categories:
 
 1. **Data Issue**: Missing/invalid data fields
 2. **Logic Issue**: Calculation or business logic errors
 3. **Delay Issue**: Timeout or processing delays
+4. **Incorrect Payout**: Payout is zero while sales exceed target
+5. **Suspicious Value**: Payout is unusually high relative to sales
 
 **Classification Service**: `src/services/errorDetection.ts`
+
+### Monitoring Rules
+
+- Flag payouts where `actualAmount = 0` and `salesAmount > salesTarget`
+- Flag payouts where `actualAmount / salesAmount > 0.5`
+- Re-query the shared database on every page load and API request
 
 ### KPI Calculation
 
@@ -416,15 +440,21 @@ The dashboard includes built-in theme toggle:
 
 ### Real-time Updates
 
-- Refresh data on page load
-- Charts update automatically with latest data
-- KPI metrics fetch fresh data on each page visit
+- Refresh data on page load using live API calls
+- Charts are derived from the latest payout records
+- KPI metrics are fetched fresh from the shared database on every visit
 
 ### Error Detection
 
-- Errors logged on payout mismatch detection
-- SLA violations tracked
-- Processing delays flagged automatically
+- Errors are detected from shared incentive records and validation rules
+- Incorrect payouts and suspicious values are flagged automatically
+- SLA violations and processing delays remain tracked
+
+### Dashboard Views
+
+- KPI cards for total payouts, average incentive, anomaly count, and error rate
+- Region vs payout chart computed from live incentive data
+- Flagged error table with severity, sales context, and descriptions
 
 ### Extensibility
 
@@ -439,9 +469,9 @@ To add new metrics or dashboards:
 
 ### Current
 
-- Sample data generation for testing (no seed script included)
-- Basic filtering (type, region only)
-- Static regional definitions
+- Region chart is aggregated client-side from fetched incentive records
+- Error filters are intentionally lightweight for monitoring usage
+- Large histories may require pagination or server-side aggregation
 
 ### Future Enhancements
 

@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
+import { classifyErrors, detectInvalidPayouts } from "../../../services/errorDetection";
 
 /**
  * GET /api/errors
- * Fetches error records from shared Incentive data
+ * Fetches and detects errors from shared Incentive data
+ * 
+ * Detects:
+ * - Data issues (missing/invalid data)
+ * - Logic issues (calculation mismatches)
+ * - Delay issues (processing delays)
+ * - Incorrect payouts (zero payout when sales > target)
+ * - Suspicious values (payout too high relative to sales)
  */
 export async function GET(request: Request) {
   try {
@@ -11,46 +18,65 @@ export async function GET(request: Request) {
     const errorType = url.searchParams.get("errorType");
     const region = url.searchParams.get("region");
 
-    const where: any = { hasError: true };
+    // Get classified errors from existing error records
+    const classifiedErrors = await classifyErrors(200);
+    
+    // Detect invalid payouts (zero payout with sales > target, suspicious values)
+    const invalidPayouts = await detectInvalidPayouts();
+    
+    // Combine all errors
+    let allErrors = [...classifiedErrors, ...invalidPayouts];
 
-    if (errorType) {
-      where.errorType = errorType;
+    // Apply filters
+    if (errorType && errorType !== "all") {
+      allErrors = allErrors.filter((err) => err.errorType === errorType);
     }
-    if (region) {
-      where.employee = { region };
+
+    if (region && region !== "all") {
+      allErrors = allErrors.filter((err) => err.region === region);
     }
 
-    const incentives = await prisma.incentive.findMany({
-      where,
-      take: 200,
-      orderBy: { createdAt: "desc" },
-      include: {
-        employee: {
-          select: { name: true, email: true, region: true, department: true },
-        },
-      },
-    });
-
-    const errors = incentives.map((inc) => ({
-      id: inc.id,
-      employeeId: inc.employeeId,
-      employeeName: inc.employee.name,
-      employeeEmail: inc.employee.email,
-      region: inc.employee.region,
-      department: inc.employee.department,
-      type: inc.errorType || "Unknown",
-      severity: inc.errorSeverity || "medium",
-      description: inc.errorDescription || "No description",
-      period: inc.period,
-      expectedAmount: inc.expectedAmount,
-      actualAmount: inc.actualAmount,
-      variance: inc.variance,
-      createdAt: inc.createdAt,
+    // Format for API response
+    const errors = allErrors.map((err) => ({
+      id: err.id,
+      employeeId: err.employeeId,
+      employeeName: err.employeeName,
+      region: err.region,
+      type: err.errorType || "Unknown",
+      severity: err.errorSeverity || "medium",
+      description: err.errorDescription || "No description",
+      period: err.period,
+      classification: err.classification,
+      expectedAmount: err.expectedAmount,
+      actualAmount: err.actualAmount,
+      salesAmount: err.salesAmount || 0,
+      salesTarget: err.salesTarget || 0,
+      variance: err.variance,
     }));
 
-    return NextResponse.json({ data: errors });
+    const breakdown = {
+      total: allErrors.length,
+      byType: {
+        "data_issue": allErrors.filter((e) => e.errorType === "data_issue").length,
+        "logic_issue": allErrors.filter((e) => e.errorType === "logic_issue").length,
+        "delay_issue": allErrors.filter((e) => e.errorType === "delay_issue").length,
+        "incorrect_payout": allErrors.filter((e) => e.errorType === "incorrect_payout").length,
+        "suspicious_value": allErrors.filter((e) => e.errorType === "suspicious_value").length,
+      },
+      bySeverity: {
+        "critical": allErrors.filter((e) => e.errorSeverity === "critical").length,
+        "high": allErrors.filter((e) => e.errorSeverity === "high").length,
+        "medium": allErrors.filter((e) => e.errorSeverity === "medium").length,
+        "low": allErrors.filter((e) => e.errorSeverity === "low").length,
+      },
+    };
+
+    return NextResponse.json({ 
+      data: errors.slice(0, 100),
+      breakdown 
+    });
   } catch (err) {
     console.error("/api/errors", err);
-    return NextResponse.json({ data: [] });
+    return NextResponse.json({ data: [], breakdown: {} });
   }
 }

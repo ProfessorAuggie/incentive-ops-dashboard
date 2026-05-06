@@ -56,6 +56,10 @@ model Incentive {
   id               String   @id @default(cuid())
   employeeId       String
   
+  // Sales performance data
+  salesAmount      Float    @default(0)     // Total sales in period
+  salesTarget      Float    @default(0)     // Sales target for period
+  
   // Payout details
   expectedAmount   Float
   actualAmount     Float
@@ -69,9 +73,11 @@ model Incentive {
   
   // Error tracking
   hasError         Boolean  @default(false)
-  errorType        String?  // "data_issue", "logic_issue", "delay_issue", null if no error
+  errorType        String?  // "data_issue", "logic_issue", "delay_issue", "incorrect_payout", "suspicious_value"
   errorDescription String?
   errorSeverity    String?  // "critical", "high", "medium", "low"
+  isIncorrectPayout Boolean @default(false)  // Payout = 0 but sales > target
+  isSuspiciousValue Boolean @default(false)  // Payout too high relative to sales
   
   // Timestamps
   processedAt      DateTime @default(now())

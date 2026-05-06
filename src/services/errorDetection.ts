@@ -9,8 +9,62 @@ export type ClassifiedError = {
   errorType: string | null;
   errorDescription: string | null;
   errorSeverity: string | null;
-  classification: "Data issue" | "Logic issue" | "Delay issue" | "Unknown";
+  classification: "Data issue" | "Logic issue" | "Delay issue" | "Incorrect payout" | "Suspicious value" | "Unknown";
+  salesAmount: number;
+  salesTarget: number;
+  expectedAmount: number;
+  actualAmount: number;
+  variance: number;
 };
+
+/**
+ * Detects invalid payouts and suspicious values
+ * - Flag if payout = 0 but sales > target
+ * - Flag if payout too high relative to sales
+ */
+export async function detectInvalidPayouts() {
+  try {
+    const incentives = await prisma.incentive.findMany({
+      include: {
+        employee: {
+          select: { id: true, name: true, email: true, region: true },
+        },
+      },
+    });
+
+    const flagged = incentives.filter((inc) => {
+      // Rule 1: Payout = 0 but sales > target
+      const incorrectPayout = inc.actualAmount === 0 && inc.salesAmount > inc.salesTarget;
+
+      // Rule 2: Payout too high relative to sales (payout > 50% of sales)
+      const suspiciousValue = inc.salesAmount > 0 && inc.actualAmount / inc.salesAmount > 0.5;
+
+      return incorrectPayout || suspiciousValue;
+    });
+
+    return flagged.map((inc) => ({
+      id: inc.id,
+      employeeId: inc.employeeId,
+      employeeName: inc.employee.name,
+      region: inc.employee.region,
+      period: inc.period,
+      errorType: inc.actualAmount === 0 && inc.salesAmount > inc.salesTarget ? "incorrect_payout" : "suspicious_value",
+      classification: inc.actualAmount === 0 && inc.salesAmount > inc.salesTarget ? "Incorrect payout" : "Suspicious value",
+      errorDescription: inc.actualAmount === 0 && inc.salesAmount > inc.salesTarget 
+        ? `Zero payout despite achieving sales target: $${inc.salesAmount.toFixed(2)} sales vs $${inc.salesTarget.toFixed(2)} target`
+        : `Payout unusually high relative to sales: $${inc.actualAmount.toFixed(2)} payout on $${inc.salesAmount.toFixed(2)} sales`,
+      errorSeverity: inc.actualAmount === 0 && inc.salesAmount > inc.salesTarget ? "critical" : "high",
+      salesAmount: inc.salesAmount,
+      salesTarget: inc.salesTarget,
+      expectedAmount: inc.expectedAmount,
+      actualAmount: inc.actualAmount,
+      variance: inc.actualAmount - inc.expectedAmount,
+    }));
+  } catch (err) {
+    console.error("detectInvalidPayouts error:", err);
+    return [];
+  }
+}
 
 /**
  * Classifies errors from the shared Incentive records
@@ -32,7 +86,11 @@ export async function classifyErrors(limit = 100) {
     const classified: ClassifiedError[] = incentives.map((inc) => {
       let classification: ClassifiedError["classification"] = "Unknown";
 
-      if (inc.errorType === "delay_issue" || inc.errorDescription?.toLowerCase().includes("delay")) {
+      if (inc.errorType === "incorrect_payout") {
+        classification = "Incorrect payout";
+      } else if (inc.errorType === "suspicious_value") {
+        classification = "Suspicious value";
+      } else if (inc.errorType === "delay_issue" || inc.errorDescription?.toLowerCase().includes("delay")) {
         classification = "Delay issue";
       } else if (
         inc.errorType === "logic_issue" ||
@@ -56,6 +114,11 @@ export async function classifyErrors(limit = 100) {
         errorDescription: inc.errorDescription,
         errorSeverity: inc.errorSeverity,
         classification,
+        salesAmount: inc.salesAmount,
+        salesTarget: inc.salesTarget,
+        expectedAmount: inc.expectedAmount,
+        actualAmount: inc.actualAmount,
+        variance: inc.variance ?? inc.actualAmount - inc.expectedAmount,
       };
     });
 
@@ -88,7 +151,7 @@ export async function detectAnomalies() {
         ? withVariance.reduce((sum, inc) => sum + (inc.variance ?? 0), 0) / withVariance.length
         : 0;
 
-    // Flag outliers (variance > 2 standard deviations from mean)
+    // Flag outliers (variance > 5% from mean)
     const anomalies = recent.filter((inc) => {
       if (inc.variance === null || inc.variancePercent === null) return false;
       return Math.abs(inc.variancePercent) > 5; // > 5% variance
