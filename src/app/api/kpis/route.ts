@@ -1,28 +1,54 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 
+/**
+ * GET /api/kpis
+ * Returns incentive operation KPI metrics from shared database
+ */
 export async function GET() {
   try {
-    const total = await prisma.payout.count();
-    const errors = await prisma.errorLog.count();
-    const avgTime = await prisma.payout.aggregate({ _avg: { processing_time: true } });
+    // Count incentives
+    const totalIncentives = await prisma.incentive.count();
+
+    // Count errors (hasError = true)
+    const errorCount = await prisma.incentive.count({ where: { hasError: true } });
+
+    // Calculate average processing time
+    const avgProcessing = await prisma.incentive.aggregate({
+      _avg: { processingTimeMs: true },
+    });
+
+    // Count pending incentives
+    const pendingCount = await prisma.incentive.count({
+      where: { status: "pending" },
+    });
+
+    // Calculate average accuracy (SLA compliance)
+    const perfMetrics = await prisma.performance.aggregate({
+      _avg: { slaCompliance: true, accuracyRate: true },
+    });
 
     const kpis = {
-      totalPayouts: total,
-      errorRate: total > 0 ? Math.round((errors / total) * 10000) / 100 : 0,
-      avgProcessingTimeMs: Math.round((avgTime._avg.processing_time ?? 0) * 100) / 100,
-      pendingPayouts: await prisma.payout.count({ where: { status: "pending" } }),
+      totalIncentivesProcessed: totalIncentives,
+      errorRate: totalIncentives > 0 ? Math.round((errorCount / totalIncentives) * 10000) / 100 : 0,
+      avgProcessingTimeMs: Math.round((avgProcessing._avg.processingTimeMs ?? 0) * 100) / 100,
+      pendingIncentives: pendingCount,
+      slaCompliance: Math.round((perfMetrics._avg.slaCompliance ?? 100) * 100) / 100,
+      avgAccuracy: Math.round((perfMetrics._avg.accuracyRate ?? 100) * 100) / 100,
     };
 
     return NextResponse.json(kpis);
   } catch (err) {
     console.error("/api/kpis", err);
-    // fallback sample data
+    // Return fallback data
     return NextResponse.json({
-      totalPayouts: 12432,
-      errorRate: 1.23,
-      avgProcessingTimeMs: 2130,
-      pendingPayouts: 42,
+      totalIncentivesProcessed: 0,
+      errorRate: 0,
+      avgProcessingTimeMs: 0,
+      pendingIncentives: 0,
+      slaCompliance: 100,
+      avgAccuracy: 100,
     });
   }
 }
+

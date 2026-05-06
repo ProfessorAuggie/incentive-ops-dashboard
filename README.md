@@ -1,27 +1,38 @@
 # Incentive Operations Monitoring Dashboard
 
-A production-grade web application for monitoring incentive operations, detecting errors, and ensuring accuracy and efficiency in payout processing.
+A production-grade web application for monitoring incentive operations from a **shared PostgreSQL database**, detecting errors, and ensuring accuracy and efficiency in payout processing across a distributed system.
 
 ## Overview
 
 The **Incentive Operations Monitoring Dashboard (IOM)** is an enterprise-grade system designed to:
 
-- **Monitor Payouts**: Track all processed payouts with KPIs and real-time metrics
+- **Monitor Incentives**: Track employee incentive payouts with real-time KPIs from shared database
 - **Detect Errors**: Classify and log errors with severity levels and detailed descriptions
-- **Ensure Accuracy**: Compare expected vs actual payouts and flag mismatches
-- **Track Performance**: Analyze regional performance and SLA compliance
+- **Ensure Accuracy**: Compare expected vs actual payouts and flag mismatches automatically
+- **Track Performance**: Analyze regional performance metrics and SLA compliance
 - **Provide Insights**: Visualize trends and drill into specific transactions
+- **Share Data**: Integrate with other services via a common PostgreSQL database
 
 ## Architecture
 
 ### Tech Stack
 
 - **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS v4
-- **Database**: PostgreSQL (Neon)
-- **ORM**: Prisma 7.8
+- **Database**: PostgreSQL on Neon (shared across microservices)
+- **ORM**: Prisma v6.13 (environment-based configuration)
 - **Charts**: Recharts 3.8
 - **Themes**: next-themes for dark/light mode support
-- **Deployment**: Vercel
+- **Deployment**: Vercel (production-ready)
+
+### Data Models (Shared)
+
+This application reads/writes to three shared database tables:
+
+1. **Employee** - Employee master data (name, email, region, department, role)
+2. **Incentive** - Incentive/payout records with variance tracking and error detection
+3. **Performance** - Employee performance metrics (SLA, accuracy, processing times)
+
+See [SHARED_DB_SETUP.md](SHARED_DB_SETUP.md) for complete database documentation.
 
 ### Project Structure
 
@@ -29,10 +40,10 @@ The **Incentive Operations Monitoring Dashboard (IOM)** is an enterprise-grade s
 src/
 ├── app/
 │   ├── api/
-│   │   ├── kpis/              GET - Fetch KPI metrics
-│   │   ├── payouts/           GET - Fetch payouts data
+│   │   ├── kpis/              GET - Fetch KPI metrics from shared DB
+│   │   ├── payouts/           GET - Fetch incentive records from shared DB
 │   │   ├── errors/            GET - Fetch error logs with filters
-│   │   └── validate-payouts/  POST - Validate and compare payouts
+│   │   └── validate-payouts/  POST - Validate payouts via shared DB
 │   ├── components/
 │   │   ├── Navbar.tsx         Top navigation bar
 │   │   ├── Sidebar.tsx        Side navigation menu
@@ -44,10 +55,14 @@ src/
 │   ├── layout.tsx             Root layout with theme provider
 │   └── page.tsx               Home/landing page
 ├── lib/
-│   └── prisma.ts              Prisma client utility
+│   └── prisma.ts              Prisma client (uses DATABASE_URL env var)
 └── services/
-    ├── validation.ts          Payout validation logic
+    ├── validation.ts          Payout validation against shared data
     └── errorDetection.ts      Error classification service
+prisma/
+├── schema.prisma              Database schema (Employee, Incentive, Performance)
+└── seed.ts                    Seed script for sample data
+```
 prisma/
 └── schema.prisma              Database schema
 ```
@@ -114,53 +129,109 @@ prisma/
 - Lists errors associated with the payout
 - Shows error type, description, and severity
 
-## Database Schema
+## Shared Database Schema
 
-### Payout Model
+This application connects to a shared PostgreSQL database (Neon) with three core tables for distributed system integration.
+
+### Employee Model
+
+Master employee data across all services:
 
 ```prisma
-model Payout {
+model Employee {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  region        String   // US, EMEA, APAC
+  department    String
+  role          String
+  hireDate      DateTime
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  incentives    Incentive[]
+  performance   Performance[]
+}
+```
+
+### Incentive Model
+
+Tracksincentive payouts with automatic error detection and variance calculation:
+
+```prisma
+model Incentive {
   id               String   @id @default(cuid())
-  employee         String
-  region           String
-  expected_amount  Float
-  actual_amount    Float
+  employeeId       String
+  expectedAmount   Float
+  actualAmount     Float
+  variance         Float?   // Calculated: actualAmount - expectedAmount
+  variancePercent  Float?
+  processingTimeMs Int?
   status           String   @default("processed")
-  processing_time  Int?     // milliseconds
-  processed_at     DateTime @default(now())
-  errors           ErrorLog[]
+  period           String   // "2026-05", "2026-Q1"
+  
+  hasError         Boolean  @default(false)
+  errorType        String?  // data_issue, logic_issue, delay_issue
+  errorDescription String?
+  errorSeverity    String?  // critical, high, medium, low
+  
+  processedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([period])
+  @@index([hasError])
 }
 ```
 
-### ErrorLog Model
+### Performance Model
+
+Aggregated performance metrics for employee tracking:
 
 ```prisma
-model ErrorLog {
-  id          String   @id @default(cuid())
-  payoutId    String?
-  employee    String
-  region      String
-  type        String
-  severity    String   @default("medium")
-  description String
-  createdAt   DateTime @default(now())
-  payout      Payout?  @relation(fields: [payoutId], references: [id])
+model Performance {
+  id                  String   @id @default(cuid())
+  employeeId          String
+  metricsDate         DateTime
+  payoutsProcessed    Int
+  errorCount          Int
+  avgProcessingTimeMs Float
+  slaCompliance       Float
+  accuracyRate        Float
+  delayRate           Float
+  status              String   @default("active")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  employee            Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([metricsDate])
 }
 ```
+
+**See [SHARED_DB_SETUP.md](SHARED_DB_SETUP.md) for complete database documentation and multi-service architecture details.**
 
 ## API Endpoints
 
 ### `GET /api/kpis`
 
-Returns current KPI metrics.
+Returns KPI metrics queried from shared database.
 
 **Response:**
 ```json
 {
-  "totalPayouts": 12432,
-  "errorRate": 1.23,
-  "avgProcessingTimeMs": 2130,
-  "pendingPayouts": 42
+  "totalIncentivesProcessed": 10,
+  "errorRate": 20.0,
+  "avgProcessingTimeMs": 3450.5,
+  "pendingIncentives": 0,
+  "slaCompliance": 96.5,
+  "avgAccuracy": 98.2
 }
 ```
 

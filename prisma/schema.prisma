@@ -7,27 +7,81 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Payout {
-  id               String   @id @default(cuid())
-  employee         String
-  region           String
-  expected_amount  Float
-  actual_amount    Float
-  status           String   @default("processed")
-  processing_time  Int?     // milliseconds
-  processed_at     DateTime @default(now())
-  errors           ErrorLog[]
+// Shared Employee model - core employee data
+model Employee {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  region        String
+  department    String
+  role          String
+  hireDate      DateTime
+  status        String   @default("active") // active, inactive, on_leave
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations to shared data
+  incentives    Incentive[]
+  performance   Performance[]
 }
 
-model ErrorLog {
-  id          String   @id @default(cuid())
-  payoutId    String?
-  employee    String
-  region      String
-  type        String
-  severity    String   @default("medium")
-  description String
-  createdAt   DateTime @default(now())
+// Shared Performance model - tracks employee performance metrics
+model Performance {
+  id            String   @id @default(cuid())
+  employeeId    String
+  metricsDate   DateTime
+  
+  // Performance metrics
+  payoutsProcessed    Int     @default(0)
+  errorCount          Int     @default(0)
+  avgProcessingTimeMs Float   @default(0)
+  slaCompliance       Float   @default(100) // percentage 0-100
+  
+  // Quality metrics
+  accuracyRate        Float   @default(100)
+  delayRate           Float   @default(0)
+  
+  status              String  @default("active")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  payout      Payout?  @relation(fields: [payoutId], references: [id])
+  employee            Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([metricsDate])
+}
+
+// Shared Incentive model - tracks incentive payouts
+model Incentive {
+  id               String   @id @default(cuid())
+  employeeId       String
+  
+  // Payout details
+  expectedAmount   Float
+  actualAmount     Float
+  variance         Float?   // calculated: actualAmount - expectedAmount
+  variancePercent  Float?   // calculated: (variance / expectedAmount) * 100
+  
+  // Processing details
+  processingTimeMs Int?
+  status           String   @default("processed") // pending, processed, failed, reversed
+  period           String   // "2026-01", "2026-Q1", etc.
+  
+  // Error tracking
+  hasError         Boolean  @default(false)
+  errorType        String?  // "data_issue", "logic_issue", "delay_issue", null if no error
+  errorDescription String?
+  errorSeverity    String?  // "critical", "high", "medium", "low"
+  
+  // Timestamps
+  processedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([period])
+  @@index([hasError])
 }
