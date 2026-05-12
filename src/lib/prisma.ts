@@ -8,17 +8,6 @@ declare global {
   var prisma: any | undefined;
 }
 
-function createFallbackModel() {
-  return new Proxy(
-    {},
-    {
-      get: () => async () => {
-        return null;
-      },
-    },
-  );
-}
-
 function createFallbackPrismaClient() {
   return {
     incentive: new Proxy(
