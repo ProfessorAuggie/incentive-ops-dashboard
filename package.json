@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "DATABASE_URL=\"${DATABASE_URL:-postgresql://user:password@127.0.0.1:5432/mydb?schema=public}\" prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "seed": "ts-node --project tsconfig.json prisma/seed.ts"
