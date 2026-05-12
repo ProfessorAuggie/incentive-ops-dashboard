@@ -5,9 +5,14 @@ import KpiCard from "../components/KpiCard";
 
 export default function PerformancePage() {
   const [kpis, setKpis] = useState<any>(null);
+  const [chartsReady, setChartsReady] = useState(false);
 
   useEffect(() => {
     fetch("/api/kpis").then((r) => r.json()).then(setKpis);
+  }, []);
+
+  useEffect(() => {
+    setChartsReady(true);
   }, []);
 
   const slaData = [
@@ -39,29 +44,33 @@ export default function PerformancePage() {
         <section className="rounded-lg border p-4">
           <h4 className="mb-4 font-medium">SLA Performance by Region</h4>
           <div style={{ height: 280 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={slaData}>
-                <XAxis dataKey="region" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="onTime" fill="#10b981" name="On-Time (%)" />
-                <Bar dataKey="delayed" fill="#ef4444" name="Delayed (%)" />
-              </BarChart>
-            </ResponsiveContainer>
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={slaData}>
+                  <XAxis dataKey="region" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="onTime" fill="#10b981" name="On-Time (%)" />
+                  <Bar dataKey="delayed" fill="#ef4444" name="Delayed (%)" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : null}
           </div>
         </section>
 
         <section className="rounded-lg border p-4">
           <h4 className="mb-4 font-medium">Processing Time Trend (24h)</h4>
           <div style={{ height: 280 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={processingTrendData}>
-                <XAxis dataKey="hour" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="avgTime" stroke="#06b6d4" strokeWidth={2} name="Avg Time (ms)" />
-              </LineChart>
-            </ResponsiveContainer>
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={processingTrendData}>
+                  <XAxis dataKey="hour" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="avgTime" stroke="#06b6d4" strokeWidth={2} name="Avg Time (ms)" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : null}
           </div>
         </section>
       </div>

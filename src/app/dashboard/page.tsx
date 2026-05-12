@@ -7,6 +7,7 @@ export default function DashboardPage() {
   const [kpis, setKpis] = useState<any>(null);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [flaggedErrors, setFlaggedErrors] = useState<any[]>([]);
+  const [chartsReady, setChartsReady] = useState(false);
 
   const regionData = useMemo(() => {
     const totals = new Map<string, number>();
@@ -49,6 +50,10 @@ export default function DashboardPage() {
     void loadDashboard();
   }, []);
 
+  useEffect(() => {
+    setChartsReady(true);
+  }, []);
+
   const hasKpis = Boolean(kpis);
 
   return (
@@ -76,28 +81,32 @@ export default function DashboardPage() {
         <section className="rounded-lg border p-4">
           <h4 className="mb-4 font-medium">Region vs Payout</h4>
           <div style={{ height: 240 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={regionData}>
-                <XAxis dataKey="region" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="payout" fill="#4f46e5" />
-              </BarChart>
-            </ResponsiveContainer>
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={regionData}>
+                  <XAxis dataKey="region" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="payout" fill="#4f46e5" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : null}
           </div>
         </section>
 
         <section className="rounded-lg border p-4">
           <h4 className="mb-4 font-medium">Processing Time Trend</h4>
           <div style={{ height: 240 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="processingTimeMs" stroke="#06b6d4" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="processingTimeMs" stroke="#06b6d4" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : null}
           </div>
         </section>
       </div>
