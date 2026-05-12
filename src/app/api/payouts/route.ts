@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       },
     });
 
-    const data = incentives.map((inc) => ({
+    const data = incentives.map((inc: any) => ({
       id: inc.id,
       employeeId: inc.employeeId,
       employeeName: inc.employee.name,

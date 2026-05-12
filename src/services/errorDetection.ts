@@ -17,12 +17,29 @@ export type ClassifiedError = {
   variance: number;
 };
 
+export type InvalidPayout = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  region: string;
+  period: string;
+  errorType: "incorrect_payout" | "suspicious_value";
+  classification: "Incorrect payout" | "Suspicious value";
+  errorDescription: string;
+  errorSeverity: "critical" | "high";
+  salesAmount: number;
+  salesTarget: number;
+  expectedAmount: number;
+  actualAmount: number;
+  variance: number;
+};
+
 /**
  * Detects invalid payouts and suspicious values
  * - Flag if payout = 0 but sales > target
  * - Flag if payout too high relative to sales
  */
-export async function detectInvalidPayouts() {
+export async function detectInvalidPayouts(): Promise<InvalidPayout[]> {
   try {
     const incentives = await prisma.incentive.findMany({
       include: {
@@ -32,7 +49,7 @@ export async function detectInvalidPayouts() {
       },
     });
 
-    const flagged = incentives.filter((inc) => {
+    const flagged = incentives.filter((inc: any) => {
       // Rule 1: Payout = 0 but sales > target
       const incorrectPayout = inc.actualAmount === 0 && inc.salesAmount > inc.salesTarget;
 
@@ -42,7 +59,7 @@ export async function detectInvalidPayouts() {
       return incorrectPayout || suspiciousValue;
     });
 
-    return flagged.map((inc) => ({
+    return flagged.map((inc: any) => ({
       id: inc.id,
       employeeId: inc.employeeId,
       employeeName: inc.employee.name,
@@ -83,7 +100,7 @@ export async function classifyErrors(limit = 100) {
       },
     });
 
-    const classified: ClassifiedError[] = incentives.map((inc) => {
+    const classified: ClassifiedError[] = incentives.map((inc: any) => {
       let classification: ClassifiedError["classification"] = "Unknown";
 
       if (inc.errorType === "incorrect_payout") {
@@ -145,14 +162,14 @@ export async function detectAnomalies() {
     });
 
     // Calculate average variance across all incentives
-    const withVariance = recent.filter((inc) => inc.variance !== null);
+    const withVariance = recent.filter((inc: any) => inc.variance !== null);
     const avgVariance =
       withVariance.length > 0
-        ? withVariance.reduce((sum, inc) => sum + (inc.variance ?? 0), 0) / withVariance.length
+        ? withVariance.reduce((sum: number, inc: any) => sum + (inc.variance ?? 0), 0) / withVariance.length
         : 0;
 
     // Flag outliers (variance > 5% from mean)
-    const anomalies = recent.filter((inc) => {
+    const anomalies = recent.filter((inc: any) => {
       if (inc.variance === null || inc.variancePercent === null) return false;
       return Math.abs(inc.variancePercent) > 5; // > 5% variance
     });

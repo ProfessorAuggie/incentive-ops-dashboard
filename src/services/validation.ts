@@ -16,7 +16,7 @@ export async function validateIncentives() {
       },
     });
 
-    const results = incentives.map((inc) => {
+    const results = incentives.map((inc: any) => {
       const variance = inc.actualAmount - inc.expectedAmount;
       const variancePct = (Math.abs(variance) / inc.expectedAmount) * 100;
       const hasMismatch = Math.abs(variance) > 0.01;

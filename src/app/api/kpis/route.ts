@@ -44,8 +44,8 @@ export async function GET() {
     });
 
     // Calculate average amounts
-    const avgActual = allIncentives.reduce((sum, inc) => sum + inc.actualAmount, 0) / totalIncentives || 0;
-    const avgExpected = allIncentives.reduce((sum, inc) => sum + inc.expectedAmount, 0) / totalIncentives || 0;
+    const avgActual = allIncentives.reduce((sum: number, inc: { actualAmount: number }) => sum + inc.actualAmount, 0) / totalIncentives || 0;
+    const avgExpected = allIncentives.reduce((sum: number, inc: { expectedAmount: number }) => sum + inc.expectedAmount, 0) / totalIncentives || 0;
 
     // Detect anomalies
     const anomalies = await detectAnomalies();
