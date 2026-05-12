@@ -1,13 +1,13 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
   "/api/test-connection/route": "app/api/test-connection/route.js",
+  "/api/payouts/route": "app/api/payouts/route.js",
   "/api/validate-payouts/route": "app/api/validate-payouts/route.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/errors/page": "app/errors/page.js",
+  "/api/errors/route": "app/api/errors/route.js",
   "/monitoring/page": "app/monitoring/page.js",
   "/payout/[id]/page": "app/payout/[id]/page.js",
   "/reports/page": "app/reports/page.js",
   "/api/kpis/route": "app/api/kpis/route.js",
-  "/api/errors/route": "app/api/errors/route.js",
-  "/api/payouts/route": "app/api/payouts/route.js"
+  "/dashboard/page": "app/dashboard/page.js",
+  "/errors/page": "app/errors/page.js"
 }
