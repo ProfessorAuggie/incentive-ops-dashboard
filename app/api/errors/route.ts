@@ -2,15 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const incentives = await prisma.incentive.findMany({
-    include: {
-      employee: true,
-    },
-  });
-
-  const errors = incentives.filter(
-    (i) => i.anomalyFlag
-  );
+  const errors =
+    await prisma.incentive.findMany({
+      where: {
+        anomalyFlag: true,
+      },
+      include: {
+        employee: true,
+      },
+    });
 
   return NextResponse.json(errors);
 }

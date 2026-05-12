@@ -7,42 +7,86 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Employee {
-  id          String        @id @default(cuid())
-  name        String
-  region      String
-  role        String
-  createdAt   DateTime      @default(now())
+// ============================================================================
+// SHARED DATABASE SCHEMA - Distributed Incentive Intelligence System
+// ============================================================================
+// 
+// This schema is shared across multiple services in the distributed system:
+// - Web Dashboard (Next.js app)
+// - Analytics APIs
+// - Audit Trail Services
+// - Reporting Tools
+// 
+// All services read/write to the same Neon PostgreSQL database.
+// Connection: Uses DATABASE_URL env var pointing to Neon serverless instance
+// with connection pooler for optimal performance in serverless environments.
+//
+// INTEGRITY: Cascade deletes ensure data consistency when employees are removed.
+// PERFORMANCE: Strategic indexes on query patterns (region, role, quarter/year).
+// ============================================================================
 
-  performance Performance[]
-  incentives  Incentive[]
+model Employee {
+  id              String          @id @default(cuid())
+  name            String
+  role            String          // e.g., "Sales Rep", "Manager", "Director"
+  region          String          // e.g., "North", "South", "East", "West"
+  isManager       Boolean         @default(false)
+  
+  // Relations to performance and incentive data
+  performances    Performance[]
+  incentives      Incentive[]
+  createdAt       DateTime        @default(now())
+
+  // Indexes for common queries (region-based, role-based filters)
+  @@index([region])
+  @@index([role])
 }
 
 model Performance {
-  id             String   @id @default(cuid())
-  employeeId     String
-  salesAmount    Float
-  salesTarget    Float
-  previousSales  Float
-  quarter        String
+  id              String          @id @default(cuid())
+  
+  // Employee reference with cascade delete
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  
+  // Performance period and metrics
+  quarter         String          // e.g., "Q1", "Q2", "Q3", "Q4"
+  year            Int             // e.g., 2025, 2026
+  sales           Float           // Total sales achieved
+  target          Float           // Sales target
+  growth          Float           // Growth percentage (0-100+)
+  
+  // Relationship to calculated incentive
+  incentive       Incentive?
+  createdAt       DateTime        @default(now())
 
-  employee Employee @relation(fields: [employeeId], references: [id])
-
-  createdAt DateTime @default(now())
+  // Indexes for common queries (employee lookups, period filters)
+  @@index([employeeId])
+  @@index([quarter, year])
+  
+  // Constraint: One record per employee per quarter/year
+  @@unique([employeeId, quarter, year])
 }
 
 model Incentive {
-  id               String   @id @default(cuid())
-  employeeId       String
+  id              String          @id @default(cuid())
+  
+  // Employee reference with cascade delete
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  
+  // Performance reference with cascade delete
+  performance     Performance     @relation(fields: [performanceId], references: [id], onDelete: Cascade)
+  performanceId   String          @unique
+  
+  // Calculated payout and breakdown
+  payout          Float           // Final incentive amount (sales * rate)
+  breakdown       Json            // Raw breakdown with rates, bonuses, etc.
+  anomalies       String[]        @default([]) // Flagged anomaly reasons
+  
+  createdAt       DateTime        @default(now())
 
-  calculatedAmount Float
-  bonusAmount      Float
-  finalPayout      Float
-
-  anomalyFlag      Boolean @default(false)
-  anomalyReason    String?
-
-  createdAt        DateTime @default(now())
-
-  employee Employee @relation(fields: [employeeId], references: [id])
+  // Indexes for common queries (employee lookups, audit trails by date)
+  @@index([employeeId])
+  @@index([createdAt])
 }
