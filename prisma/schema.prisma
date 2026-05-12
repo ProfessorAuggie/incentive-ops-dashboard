@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id          String        @id @default(cuid())
+  name        String
+  region      String
+  role        String
+  createdAt   DateTime      @default(now())
+
+  performance Performance[]
+  incentives  Incentive[]
+}
+
+model Performance {
+  id             String   @id @default(cuid())
+  employeeId     String
+  salesAmount    Float
+  salesTarget    Float
+  previousSales  Float
+  quarter        String
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Incentive {
+  id               String   @id @default(cuid())
+  employeeId       String
+
+  calculatedAmount Float
+  bonusAmount      Float
+  finalPayout      Float
+
+  anomalyFlag      Boolean @default(false)
+  anomalyReason    String?
+
+  createdAt        DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+}
